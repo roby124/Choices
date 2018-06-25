@@ -82,6 +82,7 @@ class Choices {
       prependValue: null,
       appendValue: null,
       highlightFirstChoice: false,
+      tabKeyEnabled: false,
       renderSelectedChoices: 'auto',
       loadingText: 'Loading...',
       noResultsText: 'No results found',
@@ -1830,7 +1831,7 @@ class Choices {
       resultCount = this._searchChoices(value);
     }
 
-    const canAddItem = this._canAddItem(activeItems, value, (resultCount > 0 && (this.isSelectOneElement || this.isSelectMultipleElement)));
+    const canAddItem = this._canAddItem(activeItems, value, (resultCount > 0 && (this.isSelectOneElement || this.isSelectMultipleElement) && this.config.tabKeyEnabled));
     // We are typing into a text input and have a value, we want to show a dropdown
     // notice. Otherwise hide the dropdown
     if (this.isTextElement) {
@@ -2247,15 +2248,9 @@ class Choices {
         choice.setAttribute('aria-selected', 'false');
       });
 
-      // If highlightFirstChoice param in config is set to false
-      // exit the method
-      if (!this.config.highlightFirstChoice) {
-        return false;
-      }
-
       if (passedEl) {
         this.highlightPosition = choices.indexOf(passedEl);
-      } else {
+      } else if (this.config.highlightFirstChoice) {
         // Highlight choice based on last known highlight location
         if (choices.length > this.highlightPosition) {
           // If we have an option to highlight
@@ -2265,15 +2260,17 @@ class Choices {
           passedEl = choices[choices.length - 1];
         }
 
-        if (!passedEl) {
+        if (!passedEl && this.config.highlightFirstChoice) {
           passedEl = choices[0];
         }
       }
 
-      // Highlight given option, and set accessiblity attributes
-      passedEl.classList.add(this.config.classNames.highlightedState);
-      passedEl.setAttribute('aria-selected', 'true');
-      this.containerOuter.setAttribute('aria-activedescendant', passedEl.id);
+      if (passedEl) {
+        // Highlight given option, and set accessiblity attributes
+        passedEl.classList.add(this.config.classNames.highlightedState);
+        passedEl.setAttribute('aria-selected', 'true');
+        this.containerOuter.setAttribute('aria-activedescendant', passedEl.id);
+      }
     }
   }
 
