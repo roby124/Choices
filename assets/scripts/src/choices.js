@@ -58,6 +58,7 @@ class Choices {
       renderChoiceLimit: -1,
       maxItemCount: -1,
       addItems: true,
+      addCustomItems: true,
       removeItems: true,
       removeItemButton: false,
       editItems: false,
@@ -85,8 +86,8 @@ class Choices {
       noResultsText: 'No results found',
       noChoicesText: 'No choices to choose from',
       itemSelectText: 'Press to select',
-      addItemText: (value) => {
-        return `Press Enter to add <b>"${stripHTML(value)}"</b>`;
+      addItemText: (value, useTab = false) => {
+        return `Press ${useTab ? 'Tab' : 'Enter'} to add <b>"${stripHTML(value)}"</b>`;
       },
       maxItemText: (maxItemCount) => {
         return `Only ${maxItemCount} values can be added.`;
@@ -121,7 +122,8 @@ class Choices {
         flippedState: 'is-flipped',
         loadingState: 'is-loading',
         noResults: 'has-no-results',
-        noChoices: 'has-no-choices'
+        noChoices: 'has-no-choices',
+        notice: 'choices__item--notice'
       },
       fuseOptions: {
         include: 'score'
@@ -173,7 +175,6 @@ class Choices {
     this.isValidElementType = this.isTextElement || this.isSelectElement;
     this.isIe11 = !!(navigator.userAgent.match(/Trident/) && navigator.userAgent.match(/rv[ :]11/));
     this.isScrollingOnIe = false;
-
 
     if (this.config.shouldSortItems === true && this.isSelectOneElement) {
       if (!this.config.silent) {
@@ -1317,13 +1318,14 @@ class Choices {
    * Validates whether an item can be added by a user
    * @param {Array} activeItems The currently active items
    * @param  {String} value     Value of item to add
+   * @param  {Boolean} useTab   Print Tab instead of Enter in notice
    * @return {Object}           Response: Whether user can add item
    *                            Notice: Notice show in dropdown
    */
-  _canAddItem(activeItems, value) {
+  _canAddItem(activeItems, value, useTab = false) {
     let canAddItem = true;
     let notice = isType('Function', this.config.addItemText) ?
-      this.config.addItemText(value) :
+      this.config.addItemText(value, useTab) :
       this.config.addItemText;
 
     if (this.isSelectMultipleElement || this.isTextElement) {
@@ -1629,6 +1631,7 @@ class Choices {
     const pageUpKey = 33;
     const pageDownKey = 34;
     const ctrlDownKey = e.ctrlKey || e.metaKey;
+    const tabKey = 9;
 
     // If a user is typing and the dropdown is not active
     if (!this.isTextElement && /[a-zA-Z0-9-_ ]/.test(keyString) && !hasActiveDropdown) {
@@ -1636,6 +1639,22 @@ class Choices {
     }
 
     this.canSearch = this.config.searchEnabled;
+
+    const onTabKey = () => {
+      if ((this.isSelectMultipleElement || this.isSelectOneElement) && this.config.addItems && this.config.addCustomItems && target.value) {
+        e.preventDefault();
+
+        const value = this.input.value;
+        const canAddItem = this._canAddItem(activeItems, value);
+
+        // All is good, add
+        if (canAddItem.response) {
+          this._addItem(value);
+          this._triggerChange(value);
+          this.clearInput();
+        }
+      }
+    }
 
     const onAKey = () => {
       // If CTRL + A or CMD + A have been pressed and there are items to select
@@ -1681,6 +1700,16 @@ class Choices {
             activeItems[0].keyCode = enterKey;
           }
           this._handleChoiceAction(activeItems, highlighted);
+        } else if ((this.isSelectOneElement || this.isSelectMultipleElement) && this.config.addItems && this.config.addCustomItems) {
+          const value = this.input.value;
+          const canAddItem = this._canAddItem(activeItems, value);
+
+          // All is good, add
+          if (canAddItem.response) {
+            this._addItem(value);
+            this._triggerChange(value);
+            this.clearInput();
+          }
         }
 
       } else if (this.isSelectOneElement) {
@@ -1749,6 +1778,14 @@ class Choices {
         this._handleBackspace(activeItems);
         e.preventDefault();
       }
+      // Check the current value length
+      // Subtract 1 from total length to get the current length
+      const currentLength = e.target.value.length - 1;
+      // If value length is 0, input is focused and is select element
+      // remove all the notices from dropdown
+      if (hasFocusedInput && !currentLength && (this.isSelectOneElement || this.isSelectMultipleElement)) {
+        this._removeNotices();
+      }
     };
 
     // Map keys to key actions
@@ -1762,6 +1799,7 @@ class Choices {
       [pageDownKey]: onDirectionKey,
       [deleteKey]: onDeleteKey,
       [backKey]: onDeleteKey,
+      [tabKey]: onTabKey,
     };
 
     // If keycode has a function, run it
@@ -1783,8 +1821,15 @@ class Choices {
 
     const value = this.input.value;
     const activeItems = this.store.getItemsFilteredByActive();
-    const canAddItem = this._canAddItem(activeItems, value);
+    // Result count - used for enter/tab notice trigger
+    let resultCount = 0;
+    // Check flag to filter search input
+    if (this.config.searchChoices) {
+      // Filter available choices
+      resultCount = this._searchChoices(value);
+    }
 
+    const canAddItem = this._canAddItem(activeItems, value, (resultCount > 0 && (this.isSelectOneElement || this.isSelectMultipleElement)));
     // We are typing into a text input and have a value, we want to show a dropdown
     // notice. Otherwise hide the dropdown
     if (this.isTextElement) {
@@ -1821,6 +1866,12 @@ class Choices {
         }
       } else if (this.canSearch && canAddItem.response) {
         this._handleSearch(this.input.value);
+
+        if (value && canAddItem.notice && this.config.addCustomItems) {
+          const dropdownItem = this._getTemplate('notice', canAddItem.notice);
+          this._removeNotices();
+          this.dropdown.insertAdjacentHTML('afterbegin', dropdownItem.outerHTML);
+        }
       }
     }
     // Re-establish canSearch value from changes in _onKeyDown
@@ -2268,6 +2319,8 @@ class Choices {
     if (this.isSelectOneElement) {
       this.removeActiveItems(id);
     }
+    // New item is added, input will be empty - remove notices
+    this._removeNotices();
 
     // Trigger change event
     if (group && group.value) {
@@ -2680,7 +2733,8 @@ class Choices {
       notice: (label, type = '') => {
         let localClasses = classNames(
           globalClasses.item,
-          globalClasses.itemChoice,
+          // globalClasses.itemChoice,
+          globalClasses.notice,
           {
             [globalClasses.noResults]: (type === 'no-results'),
             [globalClasses.noChoices]: (type === 'no-choices'),
@@ -2878,6 +2932,18 @@ class Choices {
         }
       });
     }
+  }
+
+  /**
+   * Remove all notices from dropdown
+   * @return void
+   */
+  _removeNotices() {
+    const notices = Array.from(this.dropdown.querySelectorAll(`.${this.config.classNames.notice}`));
+    // Remove all notices
+    notices.forEach((notice) => {
+      notice.remove();
+    });
   }
 
   /*=====  End of Private functions  ======*/
