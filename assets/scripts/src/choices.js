@@ -81,6 +81,7 @@ class Choices {
       searchPlaceholderValue: null,
       prependValue: null,
       appendValue: null,
+      highlightFirstChoice: false,
       renderSelectedChoices: 'auto',
       loadingText: 'Loading...',
       noResultsText: 'No results found',
@@ -2245,6 +2246,12 @@ class Choices {
         choice.classList.remove(this.config.classNames.highlightedState);
         choice.setAttribute('aria-selected', 'false');
       });
+
+      // If highlightFirstChoice param in config is set to false
+      // exit the method
+      if (!this.config.highlightFirstChoice) {
+        return false;
+      }
 
       if (passedEl) {
         this.highlightPosition = choices.indexOf(passedEl);
