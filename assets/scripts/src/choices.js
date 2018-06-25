@@ -1469,11 +1469,12 @@ class Choices {
 
   /**
    * Filter choices based on search value
-   * @param  {String} value Value to filter by
+   * @param  {String}  value           Value to filter by
+   * @param  {Boolean} updateVariables Flag indicating whether to update local variables or not
    * @return
    * @private
    */
-  _searchChoices(value) {
+  _searchChoices(value, updateVariables = true) {
     const newValue = isType('String', value) ? value.trim() : value;
     const currentValue = isType('String', this.currentValue) ? this.currentValue.trim() : this.currentValue;
 
@@ -1486,12 +1487,14 @@ class Choices {
       const fuse = new Fuse(haystack, options);
       const results = fuse.search(needle);
 
-      this.currentValue = newValue;
-      this.highlightPosition = 0;
-      this.isSearching = true;
-      this.store.dispatch(
-        filterChoices(results)
-      );
+      if (updateVariables) {
+        this.currentValue = newValue;
+        this.highlightPosition = 0;
+        this.isSearching = true;
+        this.store.dispatch(
+          filterChoices(results)
+        );
+      }
 
       return results.length;
     }
@@ -1828,10 +1831,12 @@ class Choices {
     // Check flag to filter search input
     if (this.config.searchChoices) {
       // Filter available choices
-      resultCount = this._searchChoices(value);
+      // Don't update any local variables; return result count only
+      resultCount = this._searchChoices(value, false);
     }
 
     const canAddItem = this._canAddItem(activeItems, value, (resultCount > 0 && (this.isSelectOneElement || this.isSelectMultipleElement) && this.config.tabKeyEnabled));
+
     // We are typing into a text input and have a value, we want to show a dropdown
     // notice. Otherwise hide the dropdown
     if (this.isTextElement) {
